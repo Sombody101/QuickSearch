@@ -1,0 +1,29 @@
+Usage: [{cc.violet}]qs[/] [[options]] [[arguments]]
+
+[magenta]Permanent options:[/]
+  [{cc.neon}]--pref-search-engine[/] [indianred1]<path>[/]    [{cc.white}]Set the preferred search engine[/]
+  [{cc.neon}]--pref-profile[/] [indianred1]<profile>[/]       [{cc.white}]Set the preferred profile[/]
+  [{cc.neon}]--pref-site-list[/] [indianred1]<sites>[/]       [{cc.white}]Set the preferred list of sites[/]
+    [{cc.ceru}]Using a permanent option with no value prints the current value set to the console.[/]
+      [magenta]Example:[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--pref-search-engine[/]:
+        [[output]]: preffered search engine: path/to/app
+
+[magenta]Temporary options:[/]
+  [{cc.neon}]-S[/], [{cc.neon}]--search-engine[/] [indianred1]<path>[/]     [{cc.white}]Use a specific search engine for this query[/]
+  [{cc.neon}]-p[/], [{cc.neon}]--profile[/] [indianred1]<profile>[/]        [{cc.white}]Use a specific profile for this query[/]
+   └─[{cc.ceru}]Multiple sites should be comma separated and no spaces.[/]
+      [magenta]Examples:[/]
+        [{cc.violet}]qs[/] [{cc.neon}]-s[/] [{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--pref-site-list[/]:[{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
+  [{cc.neon}]-s[/], [{cc.neon}]--site-list[/] [indianred1]<sites>[/]        [{cc.white}]Use a specific list of sites for this query[/]
+  [{cc.neon}]-G[/], [{cc.neon}]--generate-settings[/]        [{cc.white}]Generate a settings file for this tool[/] [[{InAppArgs.PathToSettings()}]]
+  [{cc.neon}]--help[/]                         [{cc.white}]Display this help message[/]
+
+[magenta]Other options[/]
+  [{cc.neon}]--list-all[/]                     [{cc.white}]List all settings from {InAppArgs.PathToSettings()}[/]
+
+[magenta]Arguments:[/]
+  [indianred1]<query>[/]                        [{cc.white}]The search query to perform[/]
+
+Check for newer versions at https://github.com/Sombody101/QuickSearch
