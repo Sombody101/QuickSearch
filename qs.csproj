@@ -13,4 +13,10 @@
     <PackageReference Include="YamlDotNet" Version="13.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="Utils">
+      <HintPath>/mnt/d/Utils/Utils/bin/Debug/net6.0/Utils.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>

@@ -2,6 +2,7 @@ using Spectre.Console;
 using System.Diagnostics;
 using System.Security.AccessControl;
 using YamlDotNet.Serialization;
+using Utils;
 
 namespace QuickSearch;
 
@@ -188,13 +189,16 @@ public class Program
                 }
 
             args = tmp;
-            if (args.Length is 0)
-                log("No search terms entered", 3, true);
 
             foreach (string site in inpArgs.SpecifiedSiteList)
-                sitelist += site + "+OR+";
+                sitelist += "site:" + site + "+OR+";
             sitelist = sitelist[..^4];
         }
+        
+        args.Shrink();
+        if (args.Length is 1)
+            log("No search terms entered", 3, true);
+
 
         string searchTerms = "";
         foreach (string arg in args)
