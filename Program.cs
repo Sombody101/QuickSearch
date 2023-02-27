@@ -11,34 +11,56 @@ public class Program
     public static void Main(string[] args)
     {
         if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux()))
-        {
-            log("This app will only work with Windows or Linux", 3);
-            return;
-        }
+            log("This app will only work with Windows or Linux", 3, true);
 
-        if (args.Length > 0 && System.IO.Path.GetExtension(args[0]).ToLower() == ".sh")
-        {
-            log("This app has not been tested to work in scripts. Be advised.", 2);
-            var l = args.ToList();
-            l.Remove(args[0]);
-            args = l.ToArray();
-        }
 
         if (args.Length is 0)
-        {
-            log("No arguments provided", 3);
-            return;
-        }
+            log("No arguments provided", 3, true);
 
         // Setup Args
-        Args inpArgs;
+        Args inpArgs = new();
+
+        if (args.Contains("--reset-settings"))
+        {
+            TrySep(":", out string action, out string confirmation);
+            if (confirmation is "y")
+            {
+                WriteSettings(inpArgs);
+                log("Settings reset.");
+            }
+            if (AnsiConsole.Confirm("Are you sure you want to reset the QuickSearch settings file?\r\nThis will reset any settings to their defaults."))
+            {
+                WriteSettings(inpArgs);
+                log("Settings reset.");
+            }
+            else
+                log("Exiting...");
+            Environment.Exit(0);
+        }
+
         try
         {
             ReadSettings(out inpArgs);
             if (inpArgs is null)
             {
-                log("Settigns file is empty. Proceeding with default values", 2);
+                log("Settings file is empty. Proceeding with default values", 2);
                 inpArgs = new();
+            }
+
+            if (args.Contains("--list-all"))
+            {
+                foreach (var setting in inpArgs.GetType().GetFields())
+                    if (setting.GetValue(inpArgs).ToString() is not "System.String[]")
+                        AnsiConsole.MarkupLine($"[{cc.neon}]{setting.Name}[/]: {setting.GetValue(inpArgs)}");
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[{cc.neon}]{setting.Name}[/]:");
+                        foreach (string set in (string[])setting.GetValue(inpArgs))
+                            AnsiConsole.WriteLine($"  {set}");
+                    }
+
+
+                Environment.Exit(0);
             }
         }
         catch (FileNotFoundException)
@@ -46,28 +68,61 @@ public class Program
             log($"Could not find '{InAppArgs.PathToSettings()}'. Proceeding with default values", 2);
             inpArgs = new();
         }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            log($"Settings file is either malformed or corrupt. Run '--reset-settings' or edit it manually to fix the issue", 3, true);
+        }
         catch (Exception ex)
         {
-            log($"Unknown error while loading 'qs-settings.yaml'\r\nError message: {ex.Message}", 3);
-            return;
+            log($"Unknown error while loading 'qs-settings.yaml'\r\n{ex.Message}", 3, true);
         }
 
         for (int i = 0; i < args.Length; i++)
         {
             string arg = args[i];
+            if (arg is "--")
+                break;
             if (arg.Contains(':'))
             {
-                // Sets the settins in the .yaml file
+                // Gets or sets the settings in the .yaml file based on the value of 'va'
                 TrySep(arg, out string setting, out string value);
+                args[i] = "";
                 switch (setting)
                 {
                     case "--pref-search-engine":
-                        inpArgs.PreferedSearchEngine = value;
-                        args[i] = "";
+                        if (value is null)
+                            AnsiConsole.MarkupLine($"preferred search engine: {inpArgs.PreferredSearchEngine}");
+                        else
+                            inpArgs.PreferredSearchEngine = value;
                         break;
                     case "--pref-profile":
-                        inpArgs.PreferedProfile = value;
-                        args[i] = "";
+                        if (value is null)
+                            AnsiConsole.MarkupLine($"preferred profile: {inpArgs.PreferredProfile}");
+                        else
+                            inpArgs.PreferredProfile = value;
+                        break;
+                    case "--pref-site-list":
+                        if (value is null)
+                        {
+                            for (int x = 0; x < inpArgs.SpecifiedSiteList.Length; x++)
+                                AnsiConsole.MarkupLine($"site {x}: {inpArgs.SpecifiedSiteList[x]}");
+                            Environment.Exit(0);
+                        }
+                        else
+                        {
+                            List<string> tmp = new();
+                            if (value.Contains(','))
+                            {
+                                foreach (string site in value.Split(','))
+                                    tmp.Add(site);
+                                inpArgs.SpecifiedSiteList = tmp.ToArray();
+                            }
+                            else
+                                inpArgs.SpecifiedSiteList = new string[] { value };
+                        }
+                        break;
+                    case "-G":
+                    case "--generate-settings":
                         break;
                     default:
                         log($"Can't parse argument '{setting}'", 3);
@@ -76,52 +131,65 @@ public class Program
                 WriteSettings(inpArgs);
             }
             else if (arg.StartsWith("-"))
+            {
+                string setting = args[i];
+                string value = "";
+                if (args.Length < i + 1)
+                {
+                    value = args[++i];
+                    args[i - 1] = "";
+                }
+
+                args[i] = "";
                 switch (arg)
                 {
                     // Sets temporary settings for single use
-                    case "-se":
+                    case "-S":
                     case "--search-engine":
-                        args[i] = "";
-                        inpArgs.PreferedSearchEngine = args[++i];
-                        args[i] = "";
+                        inpArgs.PreferredSearchEngine = value;
                         break;
                     case "-p":
                     case "--profile":
-                        args[i] = "";
-                        inpArgs.PreferedProfile = args[++i];
-                        args[i] = "";
+                        inpArgs.PreferredProfile = value;
                         break;
-                    case "-gs":
-                    case "--generate-settings":
-                        WriteSettings(inpArgs);
-                        args[i] = "";
+                    case "-s":
+                    case "--site-list":
+                        List<string> tmp = new();
+                        if (value.Contains(','))
+                        {
+                            foreach (string site in value.Split(','))
+                                tmp.Add(site);
+                            inpArgs.SpecifiedSiteList = tmp.ToArray();
+                        }
+                        else
+                            inpArgs.SpecifiedSiteList = new string[] { value };
                         break;
-                    default:
-                        log($"Can't parse argument '{arg}'", 3);
+                    case "--help":
+                        AnsiConsole.MarkupLine(helpText);
                         return;
+                    default:
+
+                        log($"Can't parse argument '{arg}'", 3, true);
+                        break; // Break wont do anything, but is needed to compile
                 }
+            }
         }
 
         string sitelist = "";
-        if (inpArgs.SpecifiedSiteList.Length is 0)
+        if (inpArgs.SpecifiedSiteList.Length is not 0)
         {
             sitelist = "+";
-            inpArgs.SpecifiedSiteList = InAppArgs.CodeSiteList;
 
             string[] tmp = new string[args.Length];
             for (int i = 0; i < tmp.Length; i++)
                 if (args[i] is not "")
                 {
                     tmp[i] = args[i];
-                    Console.Write(tmp[i] + ": ");
                 }
 
             args = tmp;
-            if (args.Length is 0 or 1)
-            {
-                log("No search terms entered", 3);
-                return;
-            }
+            if (args.Length is 0)
+                log("No search terms entered", 3, true);
 
             foreach (string site in inpArgs.SpecifiedSiteList)
                 sitelist += site + "+OR+";
@@ -135,30 +203,65 @@ public class Program
 
         var searchLink = $"\"https://google.com/search?q={searchTerms}{sitelist}\"";
 
-        if (!File.Exists(inpArgs.PreferedSearchEngine))
-        {
-            log($"Failed to find search engine app with path '{inpArgs.PreferedSearchEngine}'");
-            return;
-        }
+        if (!File.Exists(inpArgs.PreferredSearchEngine))
+            log($"Failed to find search engine app with path '{inpArgs.PreferredSearchEngine}'", 3, true);
+
         Action StartApp = () => Process.Start(new ProcessStartInfo()
         {
-            FileName = inpArgs.PreferedSearchEngine,
+            FileName = inpArgs.PreferredSearchEngine,
             WorkingDirectory = OperatingSystem.IsLinux() ? "/" : Directory.GetCurrentDirectory(),
-            Arguments = $"--profile-directory=\"{inpArgs.PreferedProfile}\" {searchLink}",
+            Arguments = $"--profile-directory=\"{inpArgs.PreferredProfile}\" {searchLink}",
         });
 
         WaitFor("Starting search engine...", StartApp).GetAwaiter().GetResult();
     }
 
     public static string helpText =
-    $@"qs []";
+    $@"Usage: [{cc.violet}]qs[/] [[options]] [[arguments]]
 
-    public static void log(string message, byte severity = 0)
+[magenta]Permanent options:[/]
+  [{cc.neon}]--pref-search-engine[/] [indianred1]<path>[/]    [{cc.white}]Set the preferred search engine[/]
+  [{cc.neon}]--pref-profile[/] [indianred1]<profile>[/]       [{cc.white}]Set the preferred profile[/]
+  [{cc.neon}]--pref-site-list[/] [indianred1]<sites>[/]       [{cc.white}]Set the preferred list of sites[/]
+    [{cc.ceru}]Using a permanent option with no value prints the current value set to the console.[/]
+      [magenta]Example:[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--pref-search-engine[/]:
+        [[output]]: preferred search engine: path/to/app
+
+[magenta]Temporary options:[/]
+  [{cc.neon}]-S[/], [{cc.neon}]--search-engine[/] [indianred1]<path>[/]     [{cc.white}]Use a specific search engine for this query[/]
+  [{cc.neon}]-p[/], [{cc.neon}]--profile[/] [indianred1]<profile>[/]        [{cc.white}]Use a specific profile for this query[/]
+   └─[{cc.ceru}]Multiple sites should be comma separated and no spaces.[/]
+      [magenta]Examples:[/]
+        [{cc.violet}]qs[/] [{cc.neon}]-s[/] [{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--pref-site-list[/]:[{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
+  [{cc.neon}]-s[/], [{cc.neon}]--site-list[/] [indianred1]<sites>[/]        [{cc.white}]Use a specific list of sites for this query[/]
+  [{cc.neon}]-G[/], [{cc.neon}]--generate-settings[/]        [{cc.white}]Generate a settings file for this tool[/] [[{InAppArgs.PathToSettings()}]]
+  [{cc.neon}]--help[/]                         [{cc.white}]Display this help message[/]
+
+[magenta]Other options[/]
+  [{cc.neon}]--list-all[/]                     [{cc.white}]List all settings from {InAppArgs.PathToSettings()}[/]
+  [{cc.neon}]--reset-settings[/]               [{cc.white}]Resets all settings to their default values[/]
+    [{cc.ceru}]Use the value 'y' to bypass confirmation.[/]
+      [magenta]Example:[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--reset-settings[/]:[indianred1]y[/]
+    [{cc.ceru}]Otherwise, '--reset-settings' will promt for confirmation.[/]
+      
+
+[magenta]Arguments:[/]
+  [indianred1]<query>[/]                        [{cc.white}]The search query to perform[/]
+
+Check for newer versions at https://github.com/Sombody101/QuickSearch
+";
+
+    public static void log(string message, byte severity = 1, bool logAndExit = false)
     {
-        Console.WriteLine($"qs: " +
-            $"{(severity is 1 ? c.White : (severity is 2 ? c.Yellow : c.Red))}" +
-            $"{(severity is 1 ? "message" : (severity is 2 ? "warning" : "fatal"))}{c.norm}: " +
+        AnsiConsole.MarkupLine($"qs: [" +
+            $"{(severity is 1 ? cc.white : (severity is 2 ? "yellow" : c.Red))}]" +
+            $"{(severity is 1 ? "message" : (severity is 2 ? "warning" : "fatal"))}[/]: " +
             $"{message}");
+        if (logAndExit)
+            Environment.Exit(severity);
     }
 
     public static async Task WaitFor(string message, Action action)
@@ -237,25 +340,24 @@ public static class InAppArgs
     public static string PathToSettings() => OperatingSystem.IsWindows() ?
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
         "\\qs-settings.yaml" : "/etc/qs-settings.yaml";
-    public static string[] CodeSiteList = {
-        "site:stackoverflow.com",
-        "site:reddit.com",
-        "site:github.com",
-    };
 }
 
 public class Args
 {
-    public string PreferedSearchEngine = "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe";
-    public string PreferedProfile = "Default";
+    public string PreferredSearchEngine = "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe";
+    public string PreferredProfile = "Default";
     public string[] SpecifiedSiteList = { };
-    public string[] CasualSiteList = { };
+}
+
+public class Operations
+{
+
 }
 
 public static class c
 {
     public const string Black = "\u001b[30m";
-    public const string Red = "\u001b[38;2;255;75;75m";
+    public const string Red = "#FF4B4B";
     public const string Green = "\u001b[32m";
     public const string Yellow = "\u001b[33m";
     public const string Blue = "\u001b[34m";
@@ -271,4 +373,21 @@ public static class c
     public const string BCyan = "\u001b[36;1m";
     public const string BWhite = "\u001b[37;1m";
     public const string Pink = "\u001b[31m";
+}
+
+public static class cc
+{
+    // Not sure what in gonna do with these colors
+    //public readonly Spectre.Console.Color Oxford = new Spectre.Console.Color(10, 17, 40);
+    //public readonly Spectre.Console.Color Penn = new Spectre.Console.Color(0, 31, 84);
+    //public readonly Spectre.Console.Color Indogo = new Spectre.Console.Color(3, 64, 120);
+    //public readonly Spectre.Console.Color Cerolean = new Spectre.Console.Color(18, 130, 162);
+    //public readonly Spectre.Console.Color White = new Spectre.Console.Color(254, 252, 251);
+    // Custom color pallete
+    public const string violet = "#2D4CB4";
+    public const string neon = "#1F71FF";
+    public const string bleu = "#1388F6";
+    public const string vsky = "#5ACDED";
+    public const string ceru = "#107793";
+    public const string white = "#FEFCFB";
 }

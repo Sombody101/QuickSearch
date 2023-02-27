@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "qs": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    }
+  }
+}
