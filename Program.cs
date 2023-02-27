@@ -199,7 +199,6 @@ public class Program
         if (args.Length is 1)
             log("No search terms entered", 3, true);
 
-
         string searchTerms = "";
         foreach (string arg in args)
             searchTerms += arg + "+";
