@@ -1,35 +1,32 @@
 using Spectre.Console;
 using System.Diagnostics;
 using System.Security.AccessControl;
-using YamlDotNet.Serialization;
 using Utils;
+using YamlDotNet.Serialization;
 
 namespace QuickSearch;
 
 #pragma warning disable IDE1006
 public class Program
 {
+    public static Args inpArgs = new();
+    public static bool Debug = false;
     public static void Main(string[] args)
     {
         if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux()))
             log("This app will only work with Windows or Linux", 3, true);
 
-
         if (args.Length is 0)
-            log("No arguments provided", 3, true);
+            log("No arguments provided", 3, true, true);
+
+        if (args[0] is "DEB_ENA")
+            Debug = true;
 
         // Setup Args
-        Args inpArgs = new();
-
         if (args.Contains("--reset-settings"))
         {
             TrySep(":", out string action, out string confirmation);
-            if (confirmation is "y")
-            {
-                WriteSettings(inpArgs);
-                log("Settings reset.");
-            }
-            if (AnsiConsole.Confirm("Are you sure you want to reset the QuickSearch settings file?\r\nThis will reset any settings to their defaults."))
+            if (AnsiConsole.Confirm("Are you sure you want to reset the QuickSearch settings file?\r\nThis will reset any settings to their defaults.") || confirmation is "y")
             {
                 WriteSettings(inpArgs);
                 log("Settings reset.");
@@ -71,13 +68,15 @@ public class Program
         }
         catch (YamlDotNet.Core.YamlException)
         {
-            log($"Settings file is either malformed or corrupt. Run '--reset-settings' or edit it manually to fix the issue", 3, true);
+            log($"Settings file is either malformed or corrupt. Run '--reset-settings' or edit it manually to fix the issue", 3, true, true);
         }
         catch (Exception ex)
         {
-            log($"Unknown error while loading 'qs-settings.yaml'\r\n{ex.Message}", 3, true);
+            log($"Unknown error while loading 'qs-settings.yaml'\r\n{ex.Message}", 3, true, true);
         }
 
+        bool updateSettings = false;
+        bool forceSearch = true;
         for (int i = 0; i < args.Length; i++)
         {
             string arg = args[i];
@@ -122,14 +121,12 @@ public class Program
                                 inpArgs.SpecifiedSiteList = new string[] { value };
                         }
                         break;
-                    case "-G":
-                    case "--generate-settings":
-                        break;
                     default:
-                        log($"Can't parse argument '{setting}'", 3);
+                        log($"Can't parse property '{setting}'\r\n{helpText}", 3);
                         return;
                 }
-                WriteSettings(inpArgs);
+                updateSettings = true;
+                forceSearch = false;
             }
             else if (arg.StartsWith("-"))
             {
@@ -165,16 +162,34 @@ public class Program
                         else
                             inpArgs.SpecifiedSiteList = new string[] { value };
                         break;
+                    case "-G":
+                    case "--generate-settings":
+                        if (updateSettings && !inpArgs.HideTips)
+                            AnsiConsole.MarkupLine($"[cyan]Tip[/]: using '{setting}' is redundant when setting a property");
+                        updateSettings = true;
+                        forceSearch = false;
+                        break;
                     case "--help":
                         AnsiConsole.MarkupLine(helpText);
                         return;
                     default:
-
-                        log($"Can't parse argument '{arg}'", 3, true);
+                        log($"Can't parse switch '{arg}'", 3, true, true);
                         break; // Break wont do anything, but is needed to compile
                 }
             }
         }
+
+        if (updateSettings)
+            WriteSettings(inpArgs);
+
+        if (!forceSearch)
+            return;
+
+        if (inpArgs.PreferredSearchEngine is "")
+            log("No prefered search engine. Use '--pref-search-engine:' to set it", 3, true);
+
+        if (inpArgs.PreferredProfile is "")
+            log("No prefered profile. Use ''--pref-profile:' to set it", 3, true);
 
         string sitelist = "";
         if (inpArgs.SpecifiedSiteList.Length is not 0)
@@ -184,9 +199,7 @@ public class Program
             string[] tmp = new string[args.Length];
             for (int i = 0; i < tmp.Length; i++)
                 if (args[i] is not "")
-                {
                     tmp[i] = args[i];
-                }
 
             args = tmp;
 
@@ -194,9 +207,9 @@ public class Program
                 sitelist += "site:" + site + "+OR+";
             sitelist = sitelist[..^4];
         }
-        
+
         args.Shrink();
-        if (args.Length is 1)
+        if (args.Length is 1 or 0)
             log("No search terms entered", 3, true);
 
         string searchTerms = "";
@@ -216,7 +229,15 @@ public class Program
             Arguments = $"--profile-directory=\"{inpArgs.PreferredProfile}\" {searchLink}",
         });
 
-        WaitFor("Starting search engine...", StartApp).GetAwaiter().GetResult();
+        if (!Debug)
+            WaitFor("Starting search engine...", StartApp).GetAwaiter().GetResult();
+        else
+        {
+            AnsiConsole.MarkupLine($"Site: {searchLink}\r\n" +
+            $"App:  {inpArgs.PreferredSearchEngine}\r\n" +
+            $"Prof: {inpArgs.PreferredProfile}\r\n" +
+            $"");
+        }
     }
 
     public static string helpText =
@@ -225,6 +246,8 @@ public class Program
 [magenta]Permanent options:[/]
   [{cc.neon}]--pref-search-engine[/] [indianred1]<path>[/]    [{cc.white}]Set the preferred search engine[/]
   [{cc.neon}]--pref-profile[/] [indianred1]<profile>[/]       [{cc.white}]Set the preferred profile[/]
+    [red3]WARNING:[/] The profile name must match the wanted profile. Some search engines will create a
+    new profile if it doesnt already exist.
   [{cc.neon}]--pref-site-list[/] [indianred1]<sites>[/]       [{cc.white}]Set the preferred list of sites[/]
     [{cc.ceru}]Using a permanent option with no value prints the current value set to the console.[/]
       [magenta]Example:[/]
@@ -236,8 +259,8 @@ public class Program
   [{cc.neon}]-p[/], [{cc.neon}]--profile[/] [indianred1]<profile>[/]        [{cc.white}]Use a specific profile for this query[/]
    └─[{cc.ceru}]Multiple sites should be comma separated and no spaces.[/]
       [magenta]Examples:[/]
-        [{cc.violet}]qs[/] [{cc.neon}]-s[/] [{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
-        [{cc.violet}]qs[/] [{cc.neon}]--pref-site-list[/]:[{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to seach[/]
+        [{cc.violet}]qs[/] [{cc.neon}]-s[/] [{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to search[/]
+        [{cc.violet}]qs[/] [{cc.neon}]--pref-site-list[/]:[{cc.vsky}]google.com,github.com,stackoverflow.com[/] [{cc.bleu}]something I want to search[/]
   [{cc.neon}]-s[/], [{cc.neon}]--site-list[/] [indianred1]<sites>[/]        [{cc.white}]Use a specific list of sites for this query[/]
   [{cc.neon}]-G[/], [{cc.neon}]--generate-settings[/]        [{cc.white}]Generate a settings file for this tool[/] [[{InAppArgs.PathToSettings()}]]
   [{cc.neon}]--help[/]                         [{cc.white}]Display this help message[/]
@@ -245,37 +268,34 @@ public class Program
 [magenta]Other options[/]
   [{cc.neon}]--list-all[/]                     [{cc.white}]List all settings from {InAppArgs.PathToSettings()}[/]
   [{cc.neon}]--reset-settings[/]               [{cc.white}]Resets all settings to their default values[/]
-    [{cc.ceru}]Use the value 'y' to bypass confirmation.[/]
+   └─[{cc.ceru}]Use the value 'y' to bypass confirmation.[/]
       [magenta]Example:[/]
         [{cc.violet}]qs[/] [{cc.neon}]--reset-settings[/]:[indianred1]y[/]
-    [{cc.ceru}]Otherwise, '--reset-settings' will promt for confirmation.[/]
+     [{cc.ceru}]Otherwise, '--reset-settings' will promt for confirmation.[/]
+  [{cc.neon}]--no-help[/]                      [{cc.white}]Shows this help menu on crash when enabled[/]
+  [{cc.neon}]--no-tips[/]                      [{cc.white}]Gives tips to help improve command usage[/]
       
 
 [magenta]Arguments:[/]
   [indianred1]<query>[/]                        [{cc.white}]The search query to perform[/]
 
-Check for newer versions at https://github.com/Sombody101/QuickSearch
+Check for newer versions at [{cc.vsky}]https://github.com/Sombody101/QuickSearch[/]
 ";
 
-    public static void log(string message, byte severity = 1, bool logAndExit = false)
+    public static void log(string message, byte severity = 1, bool logAndExit = false, bool showHelpOnCrash = false)
     {
         AnsiConsole.MarkupLine($"qs: [" +
             $"{(severity is 1 ? cc.white : (severity is 2 ? "yellow" : c.Red))}]" +
             $"{(severity is 1 ? "message" : (severity is 2 ? "warning" : "fatal"))}[/]: " +
             $"{message}");
+        if (showHelpOnCrash && inpArgs.ShowHelpOnCrash)
+            AnsiConsole.MarkupLine(helpText);
         if (logAndExit)
             Environment.Exit(severity);
     }
 
     public static async Task WaitFor(string message, Action action)
-    {
-        AnsiConsole.Status()
-            .Spinner(Spinner.Known.Star)
-            .Start(message, ctx =>
-            {
-                action();
-            });
-    }
+        => AnsiConsole.Status().Spinner(Spinner.Known.Star).Start(message, ctx => { action(); });
 
     public static void WriteSettings(Args args)
     {
@@ -291,13 +311,7 @@ Check for newer versions at https://github.com/Sombody101/QuickSearch
                     fileStream.SetAccessControl(fileSecurity);
                 }
                 else
-                {
-                    var process = new Process();
-                    process.StartInfo.FileName = "/bin/chmod";
-                    process.StartInfo.Arguments = "666 " + InAppArgs.PathToSettings();
-                    process.Start();
-                    process.WaitForExit();
-                }
+                    Process.Start("/bin/chmod", "666 " + InAppArgs.PathToSettings()).WaitForExit();
             }
 
             File.WriteAllText(InAppArgs.PathToSettings(), new SerializerBuilder().Build().Serialize(args));
@@ -347,20 +361,18 @@ public static class InAppArgs
 
 public class Args
 {
-    public string PreferredSearchEngine = "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe";
+    public string PreferredSearchEngine = "";
     public string PreferredProfile = "Default";
     public string[] SpecifiedSiteList = { };
-}
-
-public class Operations
-{
-
+    public bool ShowHelpOnCrash = true;
+    public bool HideTips = false;
 }
 
 public static class c
 {
     public const string Black = "\u001b[30m";
     public const string Red = "#FF4B4B";
+    public const string _Red = "\u001b[31m";
     public const string Green = "\u001b[32m";
     public const string Yellow = "\u001b[33m";
     public const string Blue = "\u001b[34m";

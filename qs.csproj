@@ -13,9 +13,18 @@
     <PackageReference Include="YamlDotNet" Version="13.0.1" />
   </ItemGroup>
 
+  <!-- Change the path for Utils.dll based on OS (I use both linux and windows) -->
+  <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
+    <UtilsPath>D:\Utils\Utils\bin\Debug\net6.0\Utils.dll</UtilsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+    <UtilsPath>/mnt/d/Utils/Utils/bin/Debug/net6.0/Utils.dll</UtilsPath>
+  </PropertyGroup>
+
+  <!-- Use the file path for Utils.dll -->
   <ItemGroup>
     <Reference Include="Utils">
-      <HintPath>/mnt/d/Utils/Utils/bin/Debug/net6.0/Utils.dll</HintPath>
+      <HintPath>$(UtilsPath)</HintPath>
     </Reference>
   </ItemGroup>
 

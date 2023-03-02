@@ -2,7 +2,8 @@
 
 testCases=(
     "--generate-settings"
-    ""
+    "" # tests for empty args
+    "-- this tests for argument ends"
 )
 
 caseNum=0
