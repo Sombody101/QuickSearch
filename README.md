@@ -1,0 +1,1 @@
+# Important In order for qs to run, you either need DotNet 6.0.403 installed on your terminal, or download the binary that has the runtime packed. The downside to the packed binary is that is takes longer for it to start and takes up more space. Usually ~65MB.
